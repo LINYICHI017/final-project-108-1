@@ -1,0 +1,563 @@
+---
+title: "學生資訊系統" 
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    css: null
+    includes:
+      in_header: ["external/in_header/header.html"]
+      before_body: ["external/before_body/before_body.html"]
+      after_body: ["external/after_body/after_body.html"]
+ 
+      
+params:
+  output_filename: "flxdashboard_control.html"
+
+---
+
+
+---
+
+
+```{r local serve, eval=F, echo=F}
+servr::daemon_stop(
+  which=servr::daemon_list()
+)
+servr::httd(dir=".",port=8000,initpath=params$output_filename)
+```
+
+``` {js}
+$('.navbar-inverse').removeClass('navbar-inverse').addClass('navbar-default');
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message=F, warning=F)
+library(flexdashboard);library(dplyr)
+library(widgetframe)
+
+library(flexdashboard)
+library(dplyr); library(stringr); library(ggplot2); library(plotly); library(lubridate); library(readr); library(tidyr); library(showtext); library(sf); library(osmdata); library(rmapshaper); library(htmlwidgets); library(widgetframe); library(htmltools)
+library(spData); library(colorspace)
+
+library(kableExtra)
+
+font_add("QYuan","cwTeXQYuan-Medium.ttf") # 新增字體
+showtext_auto(enable=TRUE) #啟用字體
+#theme_set(theme_classic())
+knitr::opts_chunk$set(fig.align='center', fig.showtext=T, echo = F)
+
+#source("./R/support.R", encoding = "utf-8")
+```
+
+```{r}
+load("C:/Users/linyi/GitHub/course-108-1-inclass-datavisualization/finalProject.Rda")
+
+# Split out the three different individuals
+stat <- gradeData %>% dplyr::filter(grepl(pattern = "統計學系", `系級`))
+  # stat %>% View
+
+econ <- gradeData %>% dplyr::filter(grepl(pattern = "經濟學系", `系級`))
+
+accnt <- gradeData %>% dplyr::filter(grepl(pattern = "會計學系", `系級`))
+
+# split the individual's score (based on the semesters)
+splitSplit <- function(df){
+  dfn <- df %>% dplyr::mutate(`年級` = case_when(grepl(pattern = "1", `系級`) ~ "1",
+                                               grepl(pattern = "2", `系級`) ~ "2",
+                                               grepl(pattern = "3", `系級`) ~ "3",
+                                               grepl(pattern = "4", `系級`) ~ "4"))
+  colnames(dfn)[12] <- "必選修類別"
+  
+  delete <- c("系級", "科目代碼", "班別", "學年", "學期", 
+              "授課語言", "上課時間及教室", "年級")
+  
+  y11 <- dfn %>% dplyr::filter(`年級` == 1 & `學期` == 1) %>%
+    dplyr::select(-one_of(delete))
+  y12 <- dfn %>% dplyr::filter(`年級` == 1 & `學期` == 2)%>%
+    dplyr::select(-one_of(delete))
+  y21 <- dfn %>% dplyr::filter(`年級` == 2 & `學期` == 1)%>%
+    dplyr::select(-one_of(delete))
+  y22 <- dfn %>% dplyr::filter(`年級` == 2 & `學期` == 2)%>%
+    dplyr::select(-one_of(delete))
+  y31 <- dfn %>% dplyr::filter(`年級` == 3 & `學期` == 1)%>%
+    dplyr::select(-one_of(delete))
+  y32 <- dfn %>% dplyr::filter(`年級` == 3 & `學期` == 2)%>%
+    dplyr::select(-one_of(delete))
+  y41 <- dfn %>% dplyr::filter(`年級` == 4 & `學期` == 1)%>%
+    dplyr::select(-one_of(delete))
+  y42 <- dfn %>% dplyr::filter(`年級` == 4 & `學期` == 2)%>%
+    dplyr::select(-one_of(delete))
+  
+  dflist <- list(一年級上 = y11, 一年級下 = y12,
+                 二年級上 = y21, 二年級下 = y22,
+                 三年級上 = y31, 三年級下 = y32,
+                 四年級上 = y41, 四年級下 = y42)
+ 
+  return(dflist) 
+}
+
+stat <- splitSplit(df = stat)
+ # stat %>% View
+
+econ <- splitSplit(econ)                       
+accnt <- splitSplit(accnt)
+
+ # econ$二年級上
+```
+
+```{r}
+dataList <- list()
+#gradeData%>% filter(系級=="會計學系1")
+
+gradeData %>% mutate(
+ 系別=factor(case_when(
+    grepl("會計", 系級) ~"會計",
+    grepl("經濟", 系級) ~"經濟",
+    grepl("統計", 系級) ~"統計",
+    TRUE ~ as.character(系級)
+  ),levels=c("會計","經濟","統計"))   ,
+
+ 年級別 =factor(case_when(
+    grepl("1", 系級) ~"大一",
+    grepl("2", 系級) ~"大二",
+    grepl("3", 系級) ~"大三",
+    grepl("4", 系級) ~"大四",
+    TRUE ~ as.character(系級)
+  ),levels=c("大一","大二","大三","大四"))
+) ->dataList$dataGrade
+
+dataList$dataGrade %>% group_by(
+  系級
+) %>% mutate(
+  學年平均成績=as.double(sum(學期成績*學分數)/sum(學分數))
+) %>%ungroup() ->dataList$dataGrade
+
+######  1~4
+
+dataList$dataGrade %>% filter(系級=="會計學系1")  ->dataList$acc1
+dataList$dataGrade %>% filter(系級=="會計學系2")  ->dataList$acc2
+dataList$dataGrade %>% filter(系級=="會計學系3")  ->dataList$acc3
+dataList$dataGrade %>% filter(系級=="會計學系4")  ->dataList$acc4
+
+
+dataList$dataGrade %>% filter(系級=="經濟學系1")  ->dataList$eco1
+dataList$dataGrade %>% filter(系級=="經濟學系2")  ->dataList$eco2
+dataList$dataGrade %>% filter(系級=="經濟學系3")  ->dataList$eco3
+dataList$dataGrade %>% filter(系級=="經濟學系4")  ->dataList$eco4
+
+
+dataList$dataGrade %>% filter(系級=="統計學系1")  ->dataList$sta1
+dataList$dataGrade %>% filter(系級=="統計學系2")  ->dataList$sta2
+dataList$dataGrade %>% filter(系級=="統計學系3")  ->dataList$sta3
+dataList$dataGrade %>% filter(系級=="統計學系4")  ->dataList$sta4
+
+
+rbind(dataList$acc1,dataList$eco1,dataList$sta1) ->dataList$class1
+rbind(dataList$acc2,dataList$eco2,dataList$sta2) ->dataList$class2
+rbind(dataList$acc3,dataList$eco3,dataList$sta3) ->dataList$class3
+rbind(dataList$acc4,dataList$eco4,dataList$sta4) ->dataList$class4
+
+
+rbind(dataList$acc1,dataList$acc2,dataList$acc3,dataList$acc4) ->dataList$acc
+rbind(dataList$eco1,dataList$eco2,dataList$eco3,dataList$acc4) ->dataList$eco
+rbind(dataList$sta1,dataList$sta2,dataList$sta3,dataList$sta4) ->dataList$sta
+
+```
+
+
+```{r function for kable, include = F}
+kbing <- function(df){
+  kable(df, align = "c") %>%
+    kable_styling(bootstrap_options = c("hover", "striped"),
+                  full_width = F, fixed_thead = T) %>%
+    row_spec(row = which(df[1] < 60), bold = T, color = "red") %>%
+    footnote(general = "60分以下為不及格，以紅色粗體字標示")
+}
+```
+
+
+統計系學生 {data-navmenu="學期成績"}
+=====================================================
+
+
+Row {data-width=250 data-height=300}
+------------------------------
+
+### 畢業學分
+```{r vbox1}
+valueBox(value = dataList$sta  %>% summarise(sum(學分數)), icon = "far fa-check-circle", caption = "畢業學分已達標", color = 	"#c4d4cc")
+```
+
+### 必修學分
+```{r vbox1a}
+valueBox(value = 62 - dataList$sta %>% filter(`必選修類別（必／選／通）`== "必", 開課系所 == "統計學系") %>% summarise(sum(學分數)) , icon = "fas fa-exclamation", caption = "還差這些必修學分", color = "	#dfb5b5")
+```
+
+### 選修學分
+```{r vbox1b}
+valueBox(value = dataList$sta %>% filter(`必選修類別（必／選／通）`== "選") %>% summarise(sum(學分數)), icon = "far fa-check-circle", caption = "選修學分已達標", color = 		"#c4d4cc")
+```
+
+### 相關連結
+
+<iframe
+src = "mtHTML/mtHTML_plotly.html"
+scrolling = "no"
+seamless = "seamless"
+frameBorder = "0"
+width="100%"
+height="100%"></iframe>
+
+
+  
+
+Column {data-width=400 data-height=400 .tabset .tabset-fade}
+-------------------------------
+
+### 學科分析
+```{r}
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library("RColorBrewer")
+
+s_gradepie <- gradeData[c(1:62),c("系級","科目名稱","學分數","開課系所","必選修類別（必／選／通）")]
+spie <- data.frame("Categorie" = c("統計","資料科學","外語"),"Num" = c(81,15,12),row.names = NULL)
+spiegraph <- plot_ly(spie, labels = ~Categorie, values = ~Num, type = 'pie',
+             textposition = 'inside',
+             textinfo = 'label+percent',
+             insidetextfont = list(color = '#FFFFFF'),
+             hoverinfo = 'text',
+             text = ~paste(Num,' 學分數'),
+             marker = list(colors = c('#ecbdbd'	,'#f4e0bf', '	#becedd'),
+                           line = list(color = '#f0fdff', width = 2)),
+             #The 'pull' attribute can also be used to create space between the sectors
+             showlegend = FALSE) %>%
+  layout( xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+spiegraph
+```
+
+### 在學成績
+```{r}
+ggplot(data=dataList$dataGrade,aes(x=年級別,y=學年平均成績,group=1)) + 
+  geom_point(data=dataList$sta,aes(x=年級別,y=學年平均成績), color = "#96a8ba", size = 3.2) +                
+  geom_line(data=dataList$sta,aes(x=年級別,y=學年平均成績), color = "#96a8ba", size = 2) +
+  theme(
+    panel.border = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color ="#e4e4e4",size = 1.2), 
+    legend.position="none",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    plot.background = element_rect(fill = "white"),
+    panel.background = element_rect(fill = "white"),
+    plot.margin = margin(1.1,1.1,1.1,1.1, "cm"),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 15),
+    axis.ticks = element_blank()) + 
+  ylim(60,100) +
+  geom_hline(yintercept = 60, color = "#dfb5b5", size = 2) +
+  geom_text(x = 1, y = 69, label = "65.45", size = 6, color ="#96a8ba") +
+  geom_text(x = 2, y = 71, label = "67.03", size = 6, color ="#96a8ba") +
+  geom_text(x = 3, y = 74, label = "69.88", size = 6, color ="#96a8ba") +
+  geom_text(x = 4, y = 79, label = "75.39", size = 6, color ="#96a8ba")
+  
+```
+
+
+Column {data-width=400 data-height=400 .tabset .tabset-fade}
+-------------------------------------------------
+### 100上
+```{r}
+kbing(stat$一年級上)
+```
+### 100下
+```{r}
+kbing(stat$一年級下)
+```
+### 101上
+```{r}
+kbing(stat$二年級上)
+```
+### 101下
+```{r}
+kbing(stat$二年級下)
+```
+
+### 102上
+```{r}
+kbing(stat$三年級上)
+```
+### 102下
+```{r}
+kbing(stat$三年級下)
+```
+### 103上
+```{r}
+kbing(stat$四年級上)
+```
+### 103下
+```{r}
+kbing(stat$四年級下)
+```
+
+
+
+
+
+經濟系學生 {data-navmenu="學期成績"}
+========================
+
+Row {data-width=250 data-height=300}
+------------------------------
+
+### 畢業學分
+```{r vbox2}
+valueBox(value = dataList$eco %>% summarise(sum(學分數)), icon = "far fa-check-circle", caption = "畢業學分", color = "#c4d4cc")
+```
+
+### 必修學分
+```{r vbox2a}
+valueBox(value = dataList$eco %>% filter(`必選修類別（必／選／通）`== "必") %>% summarise(sum(學分數)), icon = "far fa-check-circle", caption = "必修學分", color = "#c4d4cc")
+```
+
+### 選修學分
+```{r vbox2b}
+valueBox(value = dataList$eco %>% filter(`必選修類別（必／選／通）`== "選") %>% summarise(sum(學分數)), icon = "far fa-check-circle", caption = "選修學分", color = "#c4d4cc")
+```
+
+### 相關連結
+<iframe
+src = "mtHTML/mtHTML_plotly.html"
+scrolling = "no"
+seamless = "seamless"
+frameBorder = "0"
+width="100%"
+height="100%"></iframe>
+
+
+Column {data-width=400 data-height=400 .tabset .tabset-fade}
+-------------------------------
+
+### 學科分析
+```{r}
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library("RColorBrewer")
+e_gradepie <- gradeData[c(63:129),c("系級","科目名稱","學分數","開課系所","必選修類別（必／選／通）")]
+epie <- data.frame("Categorie" = c("經濟","金融","外語"),"Num" = c(54,21,22),row.names = NULL)
+epiegraph <- plot_ly(epie, labels = ~Categorie, values = ~Num, type = 'pie',
+                     textposition = 'inside',
+                     textinfo = 'label+percent',
+                     insidetextfont = list(color = '#FFFFFF'),
+                     hoverinfo = 'text',
+                     text = ~paste(Num,' 學分數'),
+                     marker = list(colors = c('#ecbdbd'	,'#f4e0bf', '	#becedd'),
+                                   line = list(color = '	#f0fffb', width = 2)),
+                     #The 'pull' attribute can also be used to create space between the sectors
+                     showlegend = FALSE) %>%
+  layout(
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+epiegraph
+```
+
+### 在學成績
+```{r}
+ggplot(data=dataList$dataGrade,aes(x=年級別,y=學年平均成績,group=1,color=系別))+
+geom_point(data=dataList$eco,aes(x=年級別,y=學年平均成績), color = "#96a8ba", size = 3.2)+                              #eco
+  geom_line(data=dataList$eco,aes(x=年級別,y=學年平均成績), color = "#96a8ba", size = 2)+ ylim(60,100) +
+  theme(
+    panel.border = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color ="#e4e4e4",size = 1.2), 
+    legend.position="none",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    plot.background = element_rect(fill = "white"),
+    panel.background = element_rect(fill = "white"),
+    plot.margin = margin(1.1,1.1,1.1,1.1, "cm"),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 15),
+    axis.ticks = element_blank()) + 
+  ylim(60,100) +
+  geom_hline(yintercept = 60, color = "#dfb5b5", size = 2) +
+  geom_text(x = 1, y = 73, label = "69.42", size = 6, color ="#96a8ba") +
+  geom_text(x = 2, y = 80, label = "75.67", size = 6, color ="#96a8ba") +
+  geom_text(x = 3, y = 86, label = "82.24", size = 6, color ="#96a8ba") +
+  geom_text(x = 4, y = 87, label = "83.52", size = 6, color ="#96a8ba")
+```
+
+
+Column {data-width=400 data-height=400 .tabset .tabset-fade}
+-------------------------------------------------
+### 100上
+```{r}
+kbing(econ$一年級上)
+```
+### 100下
+```{r}
+kbing(econ$一年級下)
+```
+### 101上
+```{r}
+kbing(econ$二年級上)
+```
+### 101下
+```{r}
+kbing(econ$二年級下)
+```
+
+### 102上
+```{r}
+kbing(econ$三年級上)
+```
+### 102下
+```{r}
+kbing(econ$三年級下)
+```
+### 103上
+```{r}
+kbing(econ$四年級上)
+```
+### 103下
+```{r}
+kbing(econ$四年級下)
+```
+
+
+
+會計系學生 {data-navmenu="學期成績"}
+========================
+
+Row {data-width=250 data-height=300}
+------------------------------
+
+### 畢業學分
+```{r vbox13}
+valueBox(value = dataList$acc  %>% summarise(sum(學分數)), icon = "far fa-check-circle", caption = "畢業學分已達標", color = "#c4d4cc")
+```
+
+### 必修學分
+```{r vbox3a}
+valueBox(value = dataList$sta %>% filter(`必選修類別（必／選／通）`== "必") %>% summarise(sum(學分數)), icon = "far fa-check-circle", caption = "必修學分已達標", color = "#c4d4cc")
+```
+
+### 選修學分
+```{r vbox3b}
+valueBox(value = 3, icon = "fas fa-exclamation", caption = "還差這些選修學分", color = "	#dfb5b5")
+```
+
+### 相關連結
+<iframe
+src = "mtHTML/mtHTML_plotly.html"
+scrolling = "no"
+seamless = "seamless"
+frameBorder = "0"
+width="100%"
+height="100%"></iframe>
+
+Column {data-width=400 data-height=400 .tabset .tabset-fade}
+-------------------------------
+
+### 學科分析
+```{r}
+a_gradepie <- gradeData[c(130:190),c("系級","科目名稱","學分數","開課系所","必選修類別（必／選／通）")]
+apie <- data.frame("Categorie" = c("會計","金融經濟"),"Num" = c(66,30),row.names = NULL)
+apiegraph <- plot_ly(apie, labels = ~Categorie, values = ~Num, type = 'pie',
+                     textposition = 'inside',
+                     textinfo = 'label+percent',
+                     insidetextfont = list(color = '#FFFFFF'),
+                     hoverinfo = 'text',
+                     text = ~paste(Num,' 學分數'),
+                     marker = list(colors = c('#ecbdbd'	,'#f4e0bf'),
+                                   line = list(color = '#FFFFFF', width = 2)),
+                     #The 'pull' attribute can also be used to create space between the sectors
+                     showlegend = FALSE) %>%
+  layout(         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+apiegraph
+
+```
+
+### 在學成績
+```{r}
+ggplot(data=dataList$dataGrade,aes(x=年級別,y=學年平均成績,group=1,color=系別))+          #acc
+  geom_point(data=dataList$acc,aes(x=年級別,y=學年平均成績), color = "#96a8ba", size = 3.2)+
+  geom_line(data=dataList$acc,aes(x=年級別,y=學年平均成績), color = "#96a8ba", size = 2)+ ylim(60,100)+
+  theme(
+    panel.border = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color ="#e4e4e4",size = 1.2), 
+    legend.position="none",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    plot.background = element_rect(fill = "white"),
+    panel.background = element_rect(fill = "white"),
+    plot.margin = margin(1.1,1.1,1.1,1.1, "cm"),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 15),
+    axis.ticks = element_blank()) + 
+  ylim(60,100) +
+  geom_hline(yintercept = 60, color = "#dfb5b5", size = 2) +
+  geom_text(x = 1, y = 78, label = "74.13", size = 6, color ="#96a8ba") +
+  geom_text(x = 2, y = 85, label = "81.90", size = 6, color ="#96a8ba") +
+  geom_text(x = 3, y = 84, label = "79.94", size = 6, color ="#96a8ba") +
+  geom_text(x = 4, y = 86, label = "82.92", size = 6, color ="#96a8ba")
+```
+
+
+Column {data-width=400 data-height=400 .tabset .tabset-fade}
+-------------------------------------------------
+### 100上
+```{r}
+kbing(accnt$一年級上)
+```
+### 100下
+```{r}
+kbing(accnt$一年級下)
+```
+### 101上
+```{r}
+kbing(accnt$二年級上)
+```
+### 101下
+```{r}
+kbing(accnt$二年級下)
+```
+
+### 102上
+```{r}
+kbing(accnt$三年級上)
+```
+### 102下
+```{r}
+kbing(accnt$三年級下)
+```
+### 103上
+```{r}
+kbing(accnt$四年級上)
+```
+### 103下
+```{r}
+kbing(accnt$四年級下)
+```
+
+
+
+
+```{js}
+var fb=document.getElementById('fb')
+var fb1=document.getElementById('fb-1')
+var fb2=document.getElementById('fb-2')
+```
